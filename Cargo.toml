@@ -1,5 +1,5 @@
 [package]
-name = "dwmbolts"
+name = "dwm-bolts"
 version = "0.1.0"
 authors = ["Kaixi26 <jorgejg575926@gmail.com>"]
 edition = "2018"
