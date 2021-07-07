@@ -1,70 +1,39 @@
-use std::{cmp, env, process, thread, time};
+use std::sync::Arc;
+use std::{env, io, process};
+use tokio::task;
 mod config;
+use tokio::time::{sleep, Duration};
 
-#[derive(Default)]
-struct BoltState {
-    bolt: config::Bolt,
-    next_exec_time: Option<u64>,
-    text: String,
-}
-
-impl BoltState {
-    fn update_if_time(self: &mut Self, cur_time: u64) {
-        match (self.next_exec_time, self.bolt.interval) {
-            (Some(next_exec_time), Some(interval)) => {
-                if cur_time >= next_exec_time {
-                    self.text = (self.bolt.command)();
-                    self.next_exec_time = Some(cur_time + interval);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-struct State {
-    bolts: Vec<BoltState>,
+struct GlobalState {
+    bolt_output: [Option<String>; config::BOLTS.len()],
     dwm: bool,
 }
 
-impl Default for State {
+impl Default for GlobalState {
     fn default() -> Self {
-        State {
-            bolts: vec![],
+        GlobalState {
+            bolt_output: Default::default(),
             dwm: false,
         }
     }
 }
 
-impl State {
+impl GlobalState {
     fn show(self: &Self) -> String {
-        match self.bolts.get(0) {
-            None => String::from(""),
-            Some(bolt_state) => {
-                let mut ret = bolt_state.text.clone();
-                for bolt_state in self.bolts[1..].iter() {
+        let mut ret = String::new();
+        for out in self.bolt_output.iter() {
+            match out {
+                Some(out) => {
+                    ret.push_str(out.as_str());
                     ret.push_str(config::DELIM);
-                    ret.push_str(bolt_state.text.as_str());
                 }
-                ret
+                None => {}
             }
         }
+        ret.trim_end_matches(config::DELIM).to_string()
     }
 
-    fn update(self: &mut Self) -> u64 {
-        let cur_time = time::SystemTime::now()
-            .duration_since(time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let mut next_update = u64::MAX;
-        for bolt in self.bolts.iter_mut() {
-            bolt.update_if_time(cur_time);
-            next_update = cmp::min(next_update, bolt.next_exec_time.unwrap_or(u64::MAX));
-        }
-        next_update - cur_time
-    }
-
-    fn output(self: &Self) {
+    async fn output(self: &Self) {
         if self.dwm {
             process::Command::new("xsetroot")
                 .args(&["-name", self.show().as_str()])
@@ -76,30 +45,54 @@ impl State {
     }
 }
 
-fn main() {
-    let mut state = State::default();
+async fn handle_bolt(
+    state: Arc<tokio::sync::Mutex<GlobalState>>,
+    i_bolt: usize,
+) -> Result<(), io::Error> {
+    let bolt = config::BOLTS
+        .get(i_bolt)
+        .expect("Passed index overflew arraw.");
+    loop {
+        let res = (bolt.command)().await;
+        {
+            let mut state = state.lock().await;
+            let bolt_out = state
+                .bolt_output
+                .get_mut(i_bolt)
+                .expect("Passed index overflew array.");
+            *bolt_out = Some(res);
+            state.output().await;
+        };
+        sleep(Duration::from_secs(bolt.interval.unwrap_or(3600))).await;
+    }
+}
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
+
+    let mut gstate = GlobalState::default();
 
     for arg in args {
         match arg.as_str() {
             "--dwm" => {
-                state.dwm = true;
+                gstate.dwm = true;
             }
             _ => {}
         }
     }
 
-    for bolt in config::BOLTS.iter() {
-        state.bolts.push(BoltState {
-            bolt: bolt.clone(),
-            next_exec_time: Some(0),
-            text: (bolt.command)(),
-        });
+    let gstate = Arc::new(tokio::sync::Mutex::new(gstate));
+    let mut tasks: Vec<task::JoinHandle<Result<(), io::Error>>> = Vec::new();
+
+    for i_bolt in 0..config::BOLTS.len() {
+        let gstate = gstate.clone();
+        let task = task::spawn(async move { handle_bolt(gstate, i_bolt).await });
+        tasks.push(task);
     }
 
-    loop {
-        let next_update = state.update();
-        state.output();
-        thread::sleep(time::Duration::from_secs(next_update));
+    for task in tasks.iter_mut() {
+        task.await??;
     }
+
+    Ok(())
 }

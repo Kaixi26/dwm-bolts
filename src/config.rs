@@ -1,33 +1,30 @@
 mod modules;
+use std::future::Future;
+use std::pin::Pin;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct Bolt {
-    pub command: fn() -> String,
+    pub command: fn() -> Pin<Box<dyn Future<Output = String> + Send>>,
     pub interval: Option<u64>,
-}
-
-impl Default for Bolt {
-    fn default() -> Self {
-        Bolt {
-            command: || String::default(),
-            interval: None,
-        }
-    }
 }
 
 pub const DELIM: &str = " | ";
 
-pub const BOLTS: [Bolt; 3] = [
+pub const BOLTS: [Bolt; 4] = [
     Bolt {
-        command: modules::weather,
+        command: || Box::pin(modules::weather()),
         interval: Some(3600),
     },
     Bolt {
-        command: modules::temp,
+        command: || Box::pin(modules::temp()),
         interval: Some(5),
     },
     Bolt {
-        command: modules::date,
+        command: || Box::pin(modules::bat()),
         interval: Some(30),
+    },
+    Bolt {
+        command: || Box::pin(modules::date()),
+        interval: Some(60),
     },
 ];
