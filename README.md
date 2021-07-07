@@ -26,6 +26,8 @@ You can simply run.
 ```
 
 ## Future
-⋅⋅* ~~Make it async.~~ (DONE)
-⋅⋅* Reduce friction of changing used modules (maybe macros?)
-⋅⋅* Make it able to respond to signals
+⋅⋅⋅ ~~Make it async.~~ (DONE)
+
+⋅⋅⋅ Reduce friction of changing used modules (maybe macros?)
+
+⋅⋅⋅ Make it able to respond to signals
