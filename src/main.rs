@@ -66,33 +66,39 @@ async fn handle_bolt(
         sleep(Duration::from_secs(bolt.interval.unwrap_or(3600))).await;
     }
 }
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = env::args().collect();
 
-    let mut gstate = GlobalState::default();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let basic_rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
 
-    for arg in args {
-        match arg.as_str() {
-            "--dwm" => {
-                gstate.dwm = true;
+    basic_rt.block_on(async {
+        let args: Vec<String> = env::args().collect();
+
+        let mut gstate = GlobalState::default();
+
+        for arg in args {
+            match arg.as_str() {
+                "--dwm" => {
+                    gstate.dwm = true;
+                }
+                _ => {}
             }
-            _ => {}
         }
-    }
 
-    let gstate = Arc::new(tokio::sync::Mutex::new(gstate));
-    let mut tasks: Vec<task::JoinHandle<Result<(), io::Error>>> = Vec::new();
+        let gstate = Arc::new(tokio::sync::Mutex::new(gstate));
+        let mut tasks: Vec<task::JoinHandle<Result<(), io::Error>>> = Vec::new();
 
-    for i_bolt in 0..config::BOLTS.len() {
-        let gstate = gstate.clone();
-        let task = task::spawn(async move { handle_bolt(gstate, i_bolt).await });
-        tasks.push(task);
-    }
+        for i_bolt in 0..config::BOLTS.len() {
+            let gstate = gstate.clone();
+            let task = task::spawn(async move { handle_bolt(gstate, i_bolt).await });
+            tasks.push(task);
+        }
 
-    for task in tasks.iter_mut() {
-        task.await??;
-    }
+        for task in tasks.iter_mut() {
+            task.await??;
+        }
 
-    Ok(())
+                Ok(())
+    })
 }
