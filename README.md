@@ -26,5 +26,8 @@ You can simply run.
 ```
 
 ## Future
-Currently the implementation is very simple with only a single thread and blocking when running commands,
-in the future I hope to make it asynchronous and with some extra features.
+⋅⋅⋅ ~~Make it async.~~ (DONE)
+
+⋅⋅⋅ Reduce friction of changing used modules (maybe macros?)
+
+⋅⋅⋅ Make it able to respond to signals
